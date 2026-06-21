@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -12,7 +12,8 @@ import {
   UserX,
   Clock,
   AlertTriangle,
-  Send
+  Send,
+  CheckCircle
 } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import RiskBadge from '../../components/ui/RiskBadge';
@@ -23,16 +24,20 @@ import PayrollChart from '../../components/charts/PayrollChart';
 import AccountBalanceGauge from '../../components/charts/AccountBalanceGauge';
 import { mockProjects, mockPayrollRecords, mockAbnormalWorkers } from '../../data/mockData';
 import { formatMoney, formatNumber, formatPercent, formatDate, getAbnormalTypeText, getAbnormalTypeColor } from '../../utils';
+import { useRectification } from '../../context/RectificationContext';
 import { AbnormalType } from '../../types';
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { addRectification } = useRectification();
   const [activeTab, setActiveTab] = useState('bank_return');
   const [showRectifyModal, setShowRectifyModal] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [rectifyTitle, setRectifyTitle] = useState('');
   const [rectifyContent, setRectifyContent] = useState('');
   const [rectifyAssignee, setRectifyAssignee] = useState('');
+  const [rectifyDepartment, setRectifyDepartment] = useState('');
   const [rectifyDeadline, setRectifyDeadline] = useState('');
 
   const project = useMemo(() => {
@@ -64,16 +69,49 @@ const ProjectDetail = () => {
     { key: 'consecutive_unpaid', label: '连续未发薪', count: abnormalStats.consecutiveUnpaid },
   ];
 
+  useEffect(() => {
+    if (showRectifyModal && project) {
+      const defaultTitle = `关于${project.abnormalIndicators.join('、')}的整改通知`;
+      const defaultContent = `该项目存在${project.abnormalIndicators.join('、')}等问题，请项目部立即采取措施整改，确保农民工工资按时足额发放。`;
+      setRectifyTitle(defaultTitle);
+      setRectifyContent(defaultContent);
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 7);
+      setRectifyDeadline(tomorrow.toISOString().split('T')[0]);
+    }
+  }, [showRectifyModal, project]);
+
   const handleGoBack = () => {
     navigate('/');
   };
 
   const handleSubmitRectify = () => {
+    if (!project || !rectifyTitle || !rectifyContent || !rectifyAssignee || !rectifyDeadline) {
+      return;
+    }
+    
+    addRectification({
+      projectId: project.id,
+      projectName: project.name,
+      title: rectifyTitle,
+      content: rectifyContent,
+      level: project.riskLevel,
+      assignee: rectifyAssignee,
+      assignDepartment: rectifyDepartment || '项目工程部',
+      deadline: rectifyDeadline,
+    });
+
     setShowRectifyModal(false);
     setRectifyTitle('');
     setRectifyContent('');
     setRectifyAssignee('');
+    setRectifyDepartment('');
     setRectifyDeadline('');
+    
+    setShowSuccessToast(true);
+    setTimeout(() => {
+      setShowSuccessToast(false);
+    }, 3000);
   };
 
   if (!project) {
@@ -428,6 +466,16 @@ const ProjectDetail = () => {
               />
             </div>
             <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">责任部门</label>
+              <input
+                type="text"
+                value={rectifyDepartment}
+                onChange={(e) => setRectifyDepartment(e.target.value)}
+                placeholder="请输入责任部门"
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+            <div className="col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-1.5">完成日期</label>
               <input
                 type="date"
@@ -439,6 +487,20 @@ const ProjectDetail = () => {
           </div>
         </div>
       </Modal>
+
+      {showSuccessToast && (
+        <div className="fixed bottom-6 right-6 z-50 animate-fade-in-up">
+          <div className="flex items-center gap-3 px-5 py-3 bg-white rounded-xl shadow-2xl border border-green-100">
+            <div className="p-1.5 rounded-full bg-green-100 text-green-600">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-medium text-slate-800">整改通知下发成功</p>
+              <p className="text-sm text-slate-500">可在整改跟进页面查看处理进度</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

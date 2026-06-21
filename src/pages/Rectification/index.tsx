@@ -12,43 +12,61 @@ import {
   Eye,
   MessageSquare,
   AlertTriangle,
-  Plus
+  Plus,
+  Send,
+  CheckCircle2,
+  XCircle as XCircleIcon
 } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Tabs from '../../components/ui/Tabs';
 import RiskBadge from '../../components/ui/RiskBadge';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
-import { mockRectifications, mockProjects } from '../../data/mockData';
+import { mockProjects } from '../../data/mockData';
 import { 
   formatDate, 
   getRectificationStatusText, 
   getRectificationStatusColor,
   getDaysRemaining 
 } from '../../utils';
+import { useRectification } from '../../context/RectificationContext';
 import { Rectification, RectificationStatus } from '../../types';
 
 const RectificationPage = () => {
   const navigate = useNavigate();
+  const { state, addRectification, submitHandle, reviewPass, reviewReject } = useRectification();
   const [activeTab, setActiveTab] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedRectification, setSelectedRectification] = useState<Rectification | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [showHandleModal, setShowHandleModal] = useState(false);
   const [reviewComment, setReviewComment] = useState('');
+  const [handleDescription, setHandleDescription] = useState('');
+  const [handlerName, setHandlerName] = useState('');
+  
+  const [newProjectId, setNewProjectId] = useState('');
+  const [newTitle, setNewTitle] = useState('');
+  const [newLevel, setNewLevel] = useState<'high' | 'medium' | 'low'>('high');
+  const [newContent, setNewContent] = useState('');
+  const [newAssignee, setNewAssignee] = useState('');
+  const [newDepartment, setNewDepartment] = useState('');
+  const [newDeadline, setNewDeadline] = useState('');
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
   const filteredRectifications = useMemo(() => {
-    if (activeTab === 'all') return mockRectifications;
-    return mockRectifications.filter((r) => r.status === activeTab);
-  }, [activeTab]);
+    if (activeTab === 'all') return state.rectifications;
+    return state.rectifications.filter((r) => r.status === activeTab);
+  }, [activeTab, state.rectifications]);
 
   const stats = useMemo(() => {
-    const pending = mockRectifications.filter((r) => r.status === 'pending').length;
-    const inProgress = mockRectifications.filter((r) => r.status === 'in_progress').length;
-    const reviewed = mockRectifications.filter((r) => r.status === 'reviewed').length;
-    const closed = mockRectifications.filter((r) => r.status === 'closed').length;
-    return { total: mockRectifications.length, pending, inProgress, reviewed, closed };
-  }, []);
+    const pending = state.rectifications.filter((r) => r.status === 'pending').length;
+    const inProgress = state.rectifications.filter((r) => r.status === 'in_progress').length;
+    const reviewed = state.rectifications.filter((r) => r.status === 'reviewed').length;
+    const closed = state.rectifications.filter((r) => r.status === 'closed').length;
+    return { total: state.rectifications.length, pending, inProgress, reviewed, closed };
+  }, [state.rectifications]);
 
   const tabItems = [
     { key: 'all', label: '全部', count: stats.total },
@@ -57,6 +75,14 @@ const RectificationPage = () => {
     { key: 'reviewed', label: '已复核', count: stats.reviewed },
     { key: 'closed', label: '已关闭', count: stats.closed },
   ];
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setShowSuccessToast(true);
+    setTimeout(() => {
+      setShowSuccessToast(false);
+    }, 3000);
+  };
 
   const handleViewDetail = (rectification: Rectification) => {
     setSelectedRectification(rectification);
@@ -72,14 +98,75 @@ const RectificationPage = () => {
     setExpandedId(expandedId === id ? null : id);
   };
 
+  const handleOpenHandleModal = (rectification: Rectification, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedRectification(rectification);
+    setHandlerName('');
+    setHandleDescription('');
+    setShowHandleModal(true);
+  };
+
+  const handleSubmitHandle = () => {
+    if (!selectedRectification || !handlerName || !handleDescription) {
+      return;
+    }
+    submitHandle(selectedRectification.id, handlerName, handleDescription);
+    setShowHandleModal(false);
+    setSelectedRectification(null);
+    setHandlerName('');
+    setHandleDescription('');
+    showToast('处理说明提交成功，已进入整改中状态');
+  };
+
   const handleReviewPass = () => {
+    if (!selectedRectification || !reviewComment.trim()) {
+      return;
+    }
+    reviewPass(selectedRectification.id, '集团工程管理部-张经理', reviewComment);
     setShowDetailModal(false);
     setSelectedRectification(null);
+    setReviewComment('');
+    showToast('复核通过，整改已关闭');
   };
 
   const handleReviewReject = () => {
+    if (!selectedRectification || !reviewComment.trim()) {
+      return;
+    }
+    reviewReject(selectedRectification.id, '集团工程管理部-张经理', reviewComment);
     setShowDetailModal(false);
     setSelectedRectification(null);
+    setReviewComment('');
+    showToast('已驳回，需重新整改');
+  };
+
+  const handleCreateNew = () => {
+    if (!newProjectId || !newTitle || !newContent || !newAssignee || !newDeadline) {
+      return;
+    }
+    const project = mockProjects.find((p) => p.id === newProjectId);
+    if (!project) return;
+
+    addRectification({
+      projectId: newProjectId,
+      projectName: project.name,
+      title: newTitle,
+      content: newContent,
+      level: newLevel,
+      assignee: newAssignee,
+      assignDepartment: newDepartment || '项目工程部',
+      deadline: newDeadline,
+    });
+
+    setShowNewModal(false);
+    setNewProjectId('');
+    setNewTitle('');
+    setNewLevel('high');
+    setNewContent('');
+    setNewAssignee('');
+    setNewDepartment('');
+    setNewDeadline('');
+    showToast('整改创建成功');
   };
 
   const getStatusColor = (status: RectificationStatus) => {
@@ -91,6 +178,11 @@ const RectificationPage = () => {
     };
     return map[status];
   };
+
+  const selectedForDetail = useMemo(() => {
+    if (!selectedRectification) return null;
+    return state.rectifications.find((r) => r.id === selectedRectification.id) || selectedRectification;
+  }, [selectedRectification, state.rectifications]);
 
   return (
     <div className="space-y-6">
@@ -269,6 +361,16 @@ const RectificationPage = () => {
                             <Eye className="w-4 h-4" />
                             查看详情
                           </Button>
+                          {rectification.status === 'pending' && (
+                            <Button 
+                              variant="secondary"
+                              size="sm"
+                              onClick={(e) => handleOpenHandleModal(rectification, e)}
+                            >
+                              <Send className="w-4 h-4" />
+                              填写处理说明
+                            </Button>
+                          )}
                           {rectification.status === 'in_progress' && (
                             <Button 
                               size="sm"
@@ -305,15 +407,15 @@ const RectificationPage = () => {
         title="整改详情"
         width="max-w-2xl"
         footer={
-          selectedRectification?.status === 'in_progress' ? (
+          selectedForDetail?.status === 'in_progress' ? (
             <>
               <Button variant="secondary" onClick={() => setShowDetailModal(false)}>关闭</Button>
               <Button variant="danger" onClick={handleReviewReject}>
-                <XCircle className="w-4 h-4" />
+                <XCircleIcon className="w-4 h-4" />
                 驳回重改
               </Button>
               <Button onClick={handleReviewPass}>
-                <CheckCircle className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4" />
                 复核通过
               </Button>
             </>
@@ -322,40 +424,40 @@ const RectificationPage = () => {
           )
         }
       >
-        {selectedRectification && (
+        {selectedForDetail && (
           <div className="space-y-5">
             <div>
               <div className="flex items-center gap-3 mb-3">
-                <RiskBadge level={selectedRectification.level} />
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getRectificationStatusColor(selectedRectification.status)}`}>
-                  {getRectificationStatusText(selectedRectification.status)}
+                <RiskBadge level={selectedForDetail.level} />
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getRectificationStatusColor(selectedForDetail.status)}`}>
+                  {getRectificationStatusText(selectedForDetail.status)}
                 </span>
               </div>
-              <h3 className="text-lg font-semibold text-slate-800">{selectedRectification.title}</h3>
+              <h3 className="text-lg font-semibold text-slate-800">{selectedForDetail.title}</h3>
               <p 
                 className="text-sm text-primary-600 mt-1 cursor-pointer hover:underline"
-                onClick={() => handleViewProject(selectedRectification.projectId)}
+                onClick={() => handleViewProject(selectedForDetail.projectId)}
               >
-                {selectedRectification.projectName}
+                {selectedForDetail.projectName}
               </p>
             </div>
 
             <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg">
               <div>
                 <p className="text-xs text-slate-400">责任人</p>
-                <p className="text-sm font-medium text-slate-700 mt-1">{selectedRectification.assignee}</p>
-                <p className="text-xs text-slate-400 mt-0.5">{selectedRectification.assignDepartment}</p>
+                <p className="text-sm font-medium text-slate-700 mt-1">{selectedForDetail.assignee}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{selectedForDetail.assignDepartment}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-400">截止日期</p>
-                <p className="text-sm font-medium text-slate-700 mt-1">{selectedRectification.deadline}</p>
+                <p className="text-sm font-medium text-slate-700 mt-1">{selectedForDetail.deadline}</p>
                 <p className="text-xs text-risk-high mt-0.5">
-                  剩余 {getDaysRemaining(selectedRectification.deadline)} 天
+                  剩余 {getDaysRemaining(selectedForDetail.deadline)} 天
                 </p>
               </div>
               <div>
                 <p className="text-xs text-slate-400">创建时间</p>
-                <p className="text-sm font-medium text-slate-700 mt-1">{selectedRectification.createdAt.split(' ')[0]}</p>
+                <p className="text-sm font-medium text-slate-700 mt-1">{selectedForDetail.createdAt.split(' ')[0]}</p>
               </div>
             </div>
 
@@ -365,11 +467,11 @@ const RectificationPage = () => {
                 整改要求
               </h4>
               <p className="text-sm text-slate-600 leading-relaxed pl-3">
-                {selectedRectification.content}
+                {selectedForDetail.content}
               </p>
             </div>
 
-            {selectedRectification.handleDescription && (
+            {selectedForDetail.handleDescription && (
               <div>
                 <h4 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
                   <div className="w-1 h-4 bg-risk-medium rounded-full"></div>
@@ -377,16 +479,16 @@ const RectificationPage = () => {
                 </h4>
                 <div className="pl-3">
                   <p className="text-sm text-slate-600 leading-relaxed">
-                    {selectedRectification.handleDescription}
+                    {selectedForDetail.handleDescription}
                   </p>
                   <p className="text-xs text-slate-400 mt-2">
-                    处理人：{selectedRectification.handler} · {selectedRectification.handleDate}
+                    处理人：{selectedForDetail.handler} · {selectedForDetail.handleDate}
                   </p>
                 </div>
               </div>
             )}
 
-            {selectedRectification.status === 'in_progress' && (
+            {selectedForDetail.status === 'in_progress' && (
               <div className="p-4 bg-blue-50 rounded-lg">
                 <h4 className="text-sm font-medium text-blue-700 mb-2">复核意见</h4>
                 <textarea
@@ -399,7 +501,7 @@ const RectificationPage = () => {
               </div>
             )}
 
-            {selectedRectification.reviewComment && (
+            {selectedForDetail.reviewComment && (
               <div>
                 <h4 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
                   <div className="w-1 h-4 bg-risk-low rounded-full"></div>
@@ -407,14 +509,56 @@ const RectificationPage = () => {
                 </h4>
                 <div className="pl-3">
                   <p className="text-sm text-slate-600 leading-relaxed">
-                    {selectedRectification.reviewComment}
+                    {selectedForDetail.reviewComment}
                   </p>
                   <p className="text-xs text-slate-400 mt-2">
-                    复核人：{selectedRectification.reviewer} · {selectedRectification.reviewDate}
+                    复核人：{selectedForDetail.reviewer} · {selectedForDetail.reviewDate}
                   </p>
                 </div>
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={showHandleModal}
+        onClose={() => setShowHandleModal(false)}
+        title="填写处理说明"
+        width="max-w-xl"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowHandleModal(false)}>取消</Button>
+            <Button onClick={handleSubmitHandle}>提交处理</Button>
+          </>
+        }
+      >
+        {selectedRectification && (
+          <div className="space-y-4">
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <p className="text-sm font-medium text-slate-700">{selectedRectification.title}</p>
+              <p className="text-xs text-slate-500 mt-1">{selectedRectification.projectName}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">处理人</label>
+              <input
+                type="text"
+                value={handlerName}
+                onChange={(e) => setHandlerName(e.target.value)}
+                placeholder="请输入处理人姓名"
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">处理说明</label>
+              <textarea
+                value={handleDescription}
+                onChange={(e) => setHandleDescription(e.target.value)}
+                placeholder="请详细描述处理措施和进展..."
+                rows={5}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+              />
+            </div>
           </div>
         )}
       </Modal>
@@ -427,14 +571,18 @@ const RectificationPage = () => {
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowNewModal(false)}>取消</Button>
-            <Button onClick={() => setShowNewModal(false)}>确认创建</Button>
+            <Button onClick={handleCreateNew}>确认创建</Button>
           </>
         }
       >
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">关联项目</label>
-            <select className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+            <select 
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              value={newProjectId}
+              onChange={(e) => setNewProjectId(e.target.value)}
+            >
               <option value="">请选择项目</option>
               {mockProjects.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
@@ -445,13 +593,19 @@ const RectificationPage = () => {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">整改标题</label>
             <input
               type="text"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
               placeholder="请输入整改标题"
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">风险等级</label>
-            <select className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+            <select 
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              value={newLevel}
+              onChange={(e) => setNewLevel(e.target.value as 'high' | 'medium' | 'low')}
+            >
               <option value="high">高风险</option>
               <option value="medium">中风险</option>
               <option value="low">低风险</option>
@@ -460,6 +614,8 @@ const RectificationPage = () => {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">整改要求</label>
             <textarea
+              value={newContent}
+              onChange={(e) => setNewContent(e.target.value)}
               placeholder="请详细描述整改要求..."
               rows={4}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
@@ -470,20 +626,47 @@ const RectificationPage = () => {
               <label className="block text-sm font-medium text-slate-700 mb-1.5">责任人</label>
               <input
                 type="text"
+                value={newAssignee}
+                onChange={(e) => setNewAssignee(e.target.value)}
                 placeholder="请输入责任人"
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
             <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">责任部门</label>
+              <input
+                type="text"
+                value={newDepartment}
+                onChange={(e) => setNewDepartment(e.target.value)}
+                placeholder="请输入责任部门"
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+            <div className="col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-1.5">完成日期</label>
               <input
                 type="date"
+                value={newDeadline}
+                onChange={(e) => setNewDeadline(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
           </div>
         </div>
       </Modal>
+
+      {showSuccessToast && (
+        <div className="fixed bottom-6 right-6 z-50 animate-fade-in-up">
+          <div className="flex items-center gap-3 px-5 py-3 bg-white rounded-xl shadow-2xl border border-green-100">
+            <div className="p-1.5 rounded-full bg-green-100 text-green-600">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-medium text-slate-800">{toastMessage}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
